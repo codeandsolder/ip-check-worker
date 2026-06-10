@@ -1,0 +1,8 @@
+name = "ip-check-worker"
+type = "javascript"
+
+account_id = ""
+workers_dev = true
+route = ""
+zone_id = ""
+compatibility_date = "2022-06-26"
