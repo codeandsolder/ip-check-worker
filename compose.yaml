@@ -8,6 +8,7 @@ services:
       TS_AUTHKEY: file:/run/secrets/tailscale_auth_key
       TS_AUTH_ONCE: "true"
       TS_STATE_DIR: /var/lib/tailscale
+      TS_SOCKET: /var/run/tailscale/tailscaled.sock
       TS_HOSTNAME: ${WORKER_NAME}
       TS_USERSPACE: "false"
       TS_EXTRA_ARGS: --advertise-tags=tag:sccache-worker --accept-dns=false
