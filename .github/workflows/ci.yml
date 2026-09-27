@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, sccache-dist-worker]
   pull_request:
 
 jobs:
