@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Shell syntax
+        run: |
+          bash -n install.sh update.sh scripts/worker-entrypoint.sh
+      - name: ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck install.sh update.sh scripts/worker-entrypoint.sh
+      - name: Compose config
+        run: |
+          mkdir -p secrets
+          printf 'dummy\n' > secrets/tailscale-auth.key
+          cat > .env <<'ENV'
+          WORKER_NAME=sccache-ci
+          WORKER_CORES=2
+          WORKER_RAM=2G
+          SCHEDULER_URL=http://100.65.0.2:10600
+          WORKER_PORT=10501
+          SCCACHE_VERSION=0.18.0
+          TOOLCHAIN_CACHE_SIZE=21474836480
+          ENV
+          docker compose config --quiet
+      - name: Build worker image
+        run: docker compose build worker
+      - name: Entrypoint dry run
+        run: |
+          docker run --rm \
+            --cap-add SYS_ADMIN \
+            --security-opt seccomp=unconfined \
+            --security-opt apparmor=unconfined \
+            --security-opt systempaths=unconfined \
+            -e WORKER_CORES=1 \
+            -e TAILSCALE_IP_OVERRIDE=100.64.0.123 \
+            -e SCCACHE_WORKER_DRY_RUN=1 \
+            sccache-worker:local

@@ -1,0 +1,69 @@
+name: sccache-worker
+
+services:
+  tailscale:
+    image: docker.io/tailscale/tailscale:stable
+    hostname: ${WORKER_NAME}
+    environment:
+      TS_AUTHKEY: file:/run/secrets/tailscale_auth_key
+      TS_AUTH_ONCE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_HOSTNAME: ${WORKER_NAME}
+      TS_USERSPACE: "false"
+      TS_EXTRA_ARGS: --advertise-tags=tag:sccache-worker --accept-dns=false
+    secrets:
+      - tailscale_auth_key
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - tailscale-run:/var/run/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "tailscale --socket=/var/run/tailscale/tailscaled.sock status --json >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 5s
+
+  worker:
+    image: sccache-worker:local
+    build:
+      context: .
+      args:
+        SCCACHE_VERSION: ${SCCACHE_VERSION:-0.18.0}
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    environment:
+      SCHEDULER_URL: ${SCHEDULER_URL:-http://100.65.0.2:10600}
+      WORKER_PORT: ${WORKER_PORT:-10501}
+      WORKER_CORES: ${WORKER_CORES}
+      TOOLCHAIN_CACHE_SIZE: ${TOOLCHAIN_CACHE_SIZE:-21474836480}
+    volumes:
+      - tailscale-run:/var/run/tailscale:ro
+      - toolchain-cache:/var/cache/sccache-dist/toolchains
+      - build-cache:/var/cache/sccache-dist/build
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+      - systempaths=unconfined
+    cpus: ${WORKER_CORES}
+    mem_limit: ${WORKER_RAM}
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:
+  tailscale-run:
+  toolchain-cache:
+  build-cache:
+
+secrets:
+  tailscale_auth_key:
+    file: ./secrets/tailscale-auth.key
