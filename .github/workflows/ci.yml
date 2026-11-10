@@ -1,0 +1,48 @@
+name: Worker smoke test
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  worker:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Worker JavaScript syntax
+        run: node --check index.js
+      - name: Exercise the fetch event and client-IP response
+        shell: bash
+        run: |
+          node <<'JS'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          let onFetch;
+          vm.runInNewContext(fs.readFileSync('index.js', 'utf8'), {
+            Response,
+            addEventListener: (type, cb) => {
+              assert.equal(type, 'fetch');
+              assert.equal(onFetch, undefined);
+              onFetch = cb;
+            }
+          });
+          assert.equal(typeof onFetch, 'function');
+          async function request(headers, expectedBody) {
+            let response;
+            onFetch({
+              request: new Request('https://example.test/', {headers}),
+              respondWith: value => { response = value; }
+            });
+            const result = await response;
+            assert.equal(result.status, 200);
+            assert.equal(await result.text(), expectedBody);
+          }
+          (async () => {
+            await request({'CF-Connecting-IP': '203.0.113.7'}, '203.0.113.7');
+            await request({}, '');
+            console.log('worker fetch smoke passed');
+          })().catch(err => {console.error(err);process.exitCode=1;});
+          JS
